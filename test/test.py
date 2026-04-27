@@ -3,14 +3,14 @@
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import ClockCycles, Timer
 
 
 @cocotb.test()
 async def test_project(dut):
     dut._log.info("Start Full Adder Test")
 
-    # Clock (not required for combinational logic, but kept for format)
+    # Clock (kept for format consistency)
     clock = Clock(dut.clk, 10, unit="us")
     cocotb.start_soon(clock.start())
 
@@ -25,22 +25,36 @@ async def test_project(dut):
 
     dut._log.info("Applying test cases")
 
-    # Function to apply inputs and check outputs
+    # Function to test one case
     async def apply_test(a, b, cin):
-        # Pack inputs into ui_in
+
+        # Apply inputs (A=bit0, B=bit1, Cin=bit2)
         dut.ui_in.value = (cin << 2) | (b << 1) | a
-        await ClockCycles(dut.clk, 1)
+
+        # Wait for combinational logic to settle
+        await Timer(1, unit="ns")
 
         # Expected values
         expected_sum = a ^ b ^ cin
         expected_cout = (a & b) | (b & cin) | (a & cin)
 
-        dut._log.info(f"A={a} B={b} Cin={cin} -> Sum={expected_sum} Cout={expected_cout}")
+        # Extract outputs correctly
+        uo_val = int(dut.uo_out.value)
+        sum_out = uo_val & 0x1
+        cout_out = (uo_val >> 1) & 0x1
 
-        assert dut.uo_out.value[0] == expected_sum, "Sum mismatch"
-        assert dut.uo_out.value[1] == expected_cout, "Carry mismatch"
+        # Debug print
+        dut._log.info(
+            f"A={a} B={b} Cin={cin} -> "
+            f"SUM={sum_out} COUT={cout_out} | "
+            f"Expected SUM={expected_sum} COUT={expected_cout}"
+        )
 
-    # All combinations
+        # Assertions
+        assert sum_out == expected_sum, "Sum mismatch"
+        assert cout_out == expected_cout, "Carry mismatch"
+
+    # Test all 8 combinations
     await apply_test(0, 0, 0)
     await apply_test(1, 0, 0)
     await apply_test(0, 1, 0)
